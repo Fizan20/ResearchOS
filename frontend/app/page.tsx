@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 
-const API = "https://researchos-backend-dlx4.onrender.com";
+const API = "https://research-os-jade.vercel.app/_/backend";
 
 type AgentResults = {
   documents_processed: number;
