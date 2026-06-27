@@ -4,6 +4,7 @@ import { useState, useRef } from "react";
 const API = "https://research-os-jade.vercel.app/_/backend";
 
 type AgentResults = {
+  session_id: string;
   documents_processed: number;
   filenames: string[];
   total_characters: number;
@@ -30,7 +31,6 @@ type AskResults = {
 
 type Phase = "idle" | "uploading" | "done";
 
-// A helper to format inline bold, italics, and code blocks safely
 function parseInline(text: string) {
   return text
     .replace(/\*\*(.*?)\*\*/g, '<strong style="color: #F9FAFB; font-weight: 600;">$1</strong>')
@@ -38,15 +38,12 @@ function parseInline(text: string) {
     .replace(/`([^`]+)`/g, '<code style="background: rgba(255,255,255,0.05); padding: 2px 4px; border-radius: 4px; font-family: monospace; font-size: 0.9em; color: #E5E7EB;">$1</code>');
 }
 
-// Converts messy markdown into clean, structural React elements
 function FormattedText({ text }: { text: string }) {
   if (!text) return null;
-  
   const lines = text.split('\n');
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
       {lines.map((line, i) => {
-        // Handle Headings (e.g., ### Heading)
         const headingMatch = line.match(/^#{1,6}\s+(.*)/);
         if (headingMatch) {
           return (
@@ -55,8 +52,6 @@ function FormattedText({ text }: { text: string }) {
             </div>
           );
         }
-        
-        // Handle Bullet Points (*, +, -)
         const bulletMatch = line.match(/^\s*[\*\+\-]\s+(.*)/);
         if (bulletMatch) {
           return (
@@ -66,13 +61,9 @@ function FormattedText({ text }: { text: string }) {
             </div>
           );
         }
-
-        // Handle Empty Lines
         if (!line.trim()) {
           return <div key={i} style={{ height: '4px' }} />;
         }
-
-        // Standard Text
         return (
           <div key={i} dangerouslySetInnerHTML={{ __html: parseInline(line) }} />
         );
@@ -86,6 +77,7 @@ export default function Home() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [activeAgent, setActiveAgent] = useState<number>(-1);
   const [results, setResults] = useState<AgentResults | null>(null);
+  const [sessionId, setSessionId] = useState("");
   const [question, setQuestion] = useState("");
   const [asking, setAsking] = useState(false);
   const [askResult, setAskResult] = useState<AskResults | null>(null);
@@ -123,6 +115,7 @@ export default function Home() {
     setPhase("uploading");
     setResults(null);
     setAskResult(null);
+    setSessionId("");
     setActiveAgent(0);
 
     const form = new FormData();
@@ -143,6 +136,7 @@ export default function Home() {
       if (res.error) { setError(res.error); setPhase("idle"); return; }
       setActiveAgent(4);
       setResults(res);
+      setSessionId(res.session_id);
       setPhase("done");
     } catch {
       setError("Could not reach the backend. Make sure it is running on localhost:8000.");
@@ -156,7 +150,7 @@ export default function Home() {
     setAsking(true);
     setAskResult(null);
     try {
-      const res = await fetch(`${API}/ask?question=${encodeURIComponent(question)}`).then(r => r.json());
+      const res = await fetch(`${API}/ask?question=${encodeURIComponent(question)}&session_id=${sessionId}`).then(r => r.json());
       if (res.error) { setError(res.error); } else { setAskResult(res); }
     } catch {
       setError("Query failed. Make sure documents are uploaded first.");
@@ -438,4 +432,3 @@ export default function Home() {
     </main>
   );
 }
-

@@ -2,8 +2,10 @@ from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
 from groq import Groq
+from upstash_redis import Redis
 import os
 import json
+import uuid
 from pathlib import Path
 from pypdf import PdfReader
 import tempfile
@@ -13,6 +15,7 @@ load_dotenv(dotenv_path=env_path)
 
 api_key = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=api_key)
+redis = Redis.from_env()
 
 app = FastAPI()
 
@@ -23,8 +26,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-DOCUMENT_STORE = {}
 
 
 def ask_groq(prompt):
@@ -45,9 +46,9 @@ def extract_pdf_text(pdf_path):
     return extracted_text
 
 
-def build_combined_text():
+def build_combined_text(document_store):
     combined = ""
-    for filename, text in DOCUMENT_STORE.items():
+    for filename, text in document_store.items():
         combined += f"""
 ========================================
 DOCUMENT: {filename}
@@ -158,7 +159,7 @@ def debate_agent(question, initial_answer):
             "research_view": "...",
             "critic_view": "...",
             "judge_verdict": "...",
-            "confidence_score": "...",
+            "confidence_score": 85,
             "final_recommendation": "..."
         }}
 
@@ -282,9 +283,6 @@ async def upload_documents(
     pdf5: UploadFile = File(None)
 ):
     try:
-        global DOCUMENT_STORE
-        DOCUMENT_STORE = {}
-
         all_files = [
             f for f in [pdf1, pdf2, pdf3, pdf4, pdf5]
             if f is not None and f.filename != ""
@@ -299,6 +297,7 @@ async def upload_documents(
 
         total_characters = 0
         filenames = []
+        document_store = {}
         chars_per_doc = 30000 // len(uploaded_files)
 
         for file in uploaded_files:
@@ -309,9 +308,17 @@ async def upload_documents(
             document_text = extract_pdf_text(temp_pdf_path)
             total_characters += len(document_text)
             filenames.append(file.filename)
-            DOCUMENT_STORE[file.filename] = document_text[:chars_per_doc]
+            document_store[file.filename] = document_text[:chars_per_doc]
 
-        combined_text = build_combined_text()
+        # Save to Redis with 2 hour expiry
+        session_id = str(uuid.uuid4())
+        redis.set(
+            f"session:{session_id}",
+            json.dumps(document_store),
+            ex=7200
+        )
+
+        combined_text = build_combined_text(document_store)
 
         research_report = research_agent(combined_text)
         fact_report = fact_check_agent(combined_text)
@@ -319,6 +326,7 @@ async def upload_documents(
         executive_report = executive_agent(research_report, fact_report, contradiction_report)
 
         return {
+            "session_id": session_id,
             "documents_processed": len(uploaded_files),
             "filenames": filenames,
             "total_characters": total_characters,
@@ -333,14 +341,19 @@ async def upload_documents(
 
 
 @app.get("/ask")
-def ask_question(question: str):
-    global DOCUMENT_STORE
+def ask_question(question: str, session_id: str):
 
-    if not DOCUMENT_STORE:
-        return {"error": "No documents uploaded yet. Upload documents first."}
+    if not session_id:
+        return {"error": "No session ID provided."}
 
-    combined_text = build_combined_text()
-    filenames = list(DOCUMENT_STORE.keys())
+    stored = redis.get(f"session:{session_id}")
+
+    if not stored:
+        return {"error": "Session expired or documents not found. Please upload again."}
+
+    document_store = json.loads(stored)
+    combined_text = build_combined_text(document_store)
+    filenames = list(document_store.keys())
 
     initial_answer = ask_groq(
         f"""
