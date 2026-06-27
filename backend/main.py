@@ -15,7 +15,10 @@ load_dotenv(dotenv_path=env_path)
 
 api_key = os.getenv("GROQ_API_KEY")
 client = Groq(api_key=api_key)
-redis = Redis.from_env()
+redis = Redis(
+    url=os.getenv("KV_REST_API_URL"),
+    token=os.getenv("KV_REST_API_TOKEN")
+)
 
 app = FastAPI()
 
