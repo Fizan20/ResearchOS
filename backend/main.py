@@ -158,7 +158,7 @@ def debate_agent(question, initial_answer):
             "research_view": "...",
             "critic_view": "...",
             "judge_verdict": "...",
-            "confidence_score": 85,
+            "confidence_score": "...",
             "final_recommendation": "..."
         }}
 
