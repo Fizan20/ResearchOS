@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 from groq import Groq
 import os
 import json
+import threading
+import time
+import requests
 from pathlib import Path
 from pypdf import PdfReader
 import tempfile
@@ -12,14 +15,13 @@ env_path = Path(".env")
 load_dotenv(dotenv_path=env_path)
 
 api_key = os.getenv("GROQ_API_KEY")
-
 client = Groq(api_key=api_key)
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -27,6 +29,15 @@ app.add_middleware(
 
 DOCUMENT_STORE = {}
 
+def keep_alive():
+    while True:
+        time.sleep(600)
+        try:
+            requests.get("https://researchos-backend-dlx4.onrender.com/")
+        except:
+            pass
+
+threading.Thread(target=keep_alive, daemon=True).start()
 
 def ask_groq(prompt):
     response = client.chat.completions.create(
@@ -159,7 +170,7 @@ def debate_agent(question, initial_answer):
             "research_view": "...",
             "critic_view": "...",
             "judge_verdict": "...",
-            "confidence_score": "...",
+            "confidence_score": 85,
             "final_recommendation": "..."
         }}
 
@@ -286,10 +297,17 @@ async def upload_documents(
         global DOCUMENT_STORE
         DOCUMENT_STORE = {}
 
-        uploaded_files = [
+        all_files = [
             f for f in [pdf1, pdf2, pdf3, pdf4, pdf5]
             if f is not None and f.filename != ""
         ]
+
+        seen = set()
+        uploaded_files = []
+        for f in all_files:
+            if f.filename not in seen:
+                seen.add(f.filename)
+                uploaded_files.append(f)
 
         total_characters = 0
         filenames = []
