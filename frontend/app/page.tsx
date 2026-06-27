@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 
-const API = "http://localhost:8000";
+const API = "https://researchos-backend-dlx4.onrender.com";
 
 type AgentResults = {
   documents_processed: number;
