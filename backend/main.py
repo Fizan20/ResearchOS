@@ -4,9 +4,6 @@ from dotenv import load_dotenv
 from groq import Groq
 import os
 import json
-import threading
-import time
-import requests
 from pathlib import Path
 from pypdf import PdfReader
 import tempfile
@@ -29,15 +26,6 @@ app.add_middleware(
 
 DOCUMENT_STORE = {}
 
-def keep_alive():
-    while True:
-        time.sleep(600)
-        try:
-            requests.get("https://researchos-backend-dlx4.onrender.com/")
-        except:
-            pass
-
-threading.Thread(target=keep_alive, daemon=True).start()
 
 def ask_groq(prompt):
     response = client.chat.completions.create(
